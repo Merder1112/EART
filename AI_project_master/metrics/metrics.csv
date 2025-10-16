@@ -1,0 +1,2 @@
+feature_set,features,params,accuracy
+F2_all,"magnitude,depth,cdi,mmi,sig","{'max_depth': 20, 'min_samples_split': 2}",0.8885
