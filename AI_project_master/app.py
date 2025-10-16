@@ -44,7 +44,7 @@ latest = df.tail(200).reset_index(drop=True)
 
 left, right = st.columns([1,1])
 with left:
-    st.markdown("**เลือกเหตุการณ์ ( 200 แถวล่าสุดข้อมูลจาก earthquakes.csv)**")
+    st.markdown("**เลือกเหตุการณ์ ( 200 แถวล่าสุดข้อมูล )**")
     idx = st.number_input("หมายเลขแถว:", min_value=0, max_value=len(latest)-1,
                           value=len(latest)-1, step=1)
     row = latest.iloc[int(idx)].to_dict()
@@ -68,7 +68,7 @@ with right:
         "magnitude": mag, "depth": dep, "cdi": cdi, "mmi": mmi, "sig": sig
     }])
 
-if st.button("🧠 ทำนายด้วย AI", use_container_width=True):
+if st.button(" ทำนายด้วย AI", use_container_width=True):
     feat_cols = [c for c in ["magnitude","depth","cdi","mmi","sig"] if c in df.columns]
     X = inputs[feat_cols]
     y_id = model.predict(X)[0]
@@ -109,10 +109,9 @@ if "last_pred" in st.session_state:
 
 # --- Public area ---
 st.divider()
-st.subheader("🚨 พื้นที่ประกาศ (แสดงต่อประชาชน)")
+st.subheader("🚨 สำหรับแสดงการแจ้งเตือนให้ประชาชน")
 if ANN_PATH.exists():
     ann = json.load(open(ANN_PATH, encoding="utf-8"))
-    st.caption(f"อัปเดตล่าสุด: {ann.get('last_updated','-')}")
     for a in ann.get("announcements", []):
         level = str(a.get("risk_level","")).lower()
         color = {"green":"🟢","yellow":"🟡","orange":"🟠","red":"🔴"}.get(level, "🔶")
@@ -120,7 +119,7 @@ if ANN_PATH.exists():
         st.write(f"พื้นที่ : **{a.get('region','-')}**")
         if a.get("message"): st.write(a["message"])
         if a.get("tips"):
-            st.write("คำแนะนความความปลอดภัย:")
+            st.write("คำแนะนความความปลอดภัย ดังนี้")
             for t in a["tips"]:
                 st.write(f"- {t}")
 else:
