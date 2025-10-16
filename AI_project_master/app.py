@@ -1,4 +1,3 @@
-# AI_project_master/app.py
 import streamlit as st
 import pandas as pd
 import joblib, json, time
@@ -16,18 +15,18 @@ ANN_PATH    = BASE / "storage" / "public_announcements.json"
 st.title("🌎 ระบบแจ้งเตือนแผ่นดินไหว")
 st.caption("เลือกเหตุการณ์/กรอกค่าพารามิเตอร์ → ทำนายด้วย AI (Decision Tree) → เผยแพร่ประกาศ")
 
-# --- Check required files (สั้นและชัด) ---
+# --- Check required files (เช็กไฟล์จำเป็น) ---
 missing = [p for p in [DATA_PATH, MODEL_PATH, ENC_PATH] if not p.exists()]
 if missing:
     st.error("ไม่พบไฟล์ต่อไปนี้:\n" + "\n".join(f"- {p}" for p in missing))
     st.stop()
 
-# --- Load data/model/encoder ---
+# --- โหลดข้อมูล + โมเดล ---
 df = pd.read_csv(DATA_PATH)
 model = joblib.load(MODEL_PATH)
 le    = joblib.load(ENC_PATH)
 
-# Clean numeric for UI
+# Clean numeric for UI (ตรียมคอลัมน์ตัวเลข)
 for col in ["magnitude","depth","cdi","mmi","sig"]:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -67,7 +66,7 @@ with right:
     inputs = pd.DataFrame([{
         "magnitude": mag, "depth": dep, "cdi": cdi, "mmi": mmi, "sig": sig
     }])
-
+# ---ปุ่ม “ทำนายด้วย AI”----
 if st.button(" ทำนายด้วย AI", use_container_width=True):
     feat_cols = [c for c in ["magnitude","depth","cdi","mmi","sig"] if c in df.columns]
     X = inputs[feat_cols]
@@ -80,7 +79,7 @@ if st.button(" ทำนายด้วย AI", use_container_width=True):
         "region": str(row.get("place", "Affected area")) if "place" in row else "Affected area"
     }
 
-# --- Publish announcement ---
+# --- เผยแพร่ประกาศ (สำหรับประชาชน) ---
 if "last_pred" in st.session_state:
     st.divider()
     st.subheader(" เผยแพร่ประกาศการแจ้งเตือนภัย")
@@ -107,7 +106,7 @@ if "last_pred" in st.session_state:
             json.dump(doc, f, ensure_ascii=False, indent=2)
         st.success("เผยแพร่แล้ว ตัวอย่างการประกาศอยู่ด้านล่าง ")
 
-# --- Public area ---
+# --- แสดงการแจ้งเตือนให้ประชาชน ---
 st.divider()
 st.subheader("การแจ้งเตือนของประชาชน")
 if ANN_PATH.exists():
