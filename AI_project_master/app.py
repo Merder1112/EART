@@ -109,7 +109,7 @@ if "last_pred" in st.session_state:
 
 # --- Public area ---
 st.divider()
-st.subheader("🚨 สำหรับแสดงการแจ้งเตือนให้ประชาชน")
+st.subheader("แสดงการแจ้งเตือนให้ประชาชน")
 if ANN_PATH.exists():
     ann = json.load(open(ANN_PATH, encoding="utf-8"))
     for a in ann.get("announcements", []):
