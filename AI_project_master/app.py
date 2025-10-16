@@ -34,7 +34,7 @@ for col in ["magnitude","depth","cdi","mmi","sig"]:
         df[col] = df[col].fillna(df[col].median())
 
 st.write(f"ข้อมูลทั้งหมด : {len(df):,} แถว")
-with st.expander("ดูตัวอย่างข้อมูล (5 แถว)"):
+with st.expander("ดูตัวอย่างข้อมูล (10 แถว)"):
     st.dataframe(df.head(10), use_container_width=True)
 
 # --- Officer section: เลือก/กรอก + ทำนาย ---
@@ -124,3 +124,4 @@ if ANN_PATH.exists():
                 st.write(f"- {t}")
 else:
     st.info("ยังไม่มีประกาศล่าสุด")
+
