@@ -14,7 +14,7 @@ ENC_PATH    = BASE / "models" / "label_encoder.pkl"
 ANN_PATH    = BASE / "storage" / "public_announcements.json"
 
 st.title("🌎 ระบบแจ้งเตือนแผ่นดินไหว")
-st.caption("เลือกเหตุการณ์/กรอกค่า → ทำนายด้วย AI (Decision Tree) → เผยแพร่ประกาศ")
+st.caption("เลือกเหตุการณ์กรอกค่าพารามิเตอร์ → ทำนายด้วย AI (Decision Tree) → เผยแพร่ประกาศ")
 
 # --- Check required files (สั้นและชัด) ---
 missing = [p for p in [DATA_PATH, MODEL_PATH, ENC_PATH] if not p.exists()]
@@ -33,17 +33,18 @@ for col in ["magnitude","depth","cdi","mmi","sig"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         df[col] = df[col].fillna(df[col].median())
 
-st.write(f"📦 ข้อมูลทั้งหมด: {len(df):,} แถว")
+st.write(f"ข้อมูลทั้งหมด : {len(df):,} แถว")
 with st.expander("ดูตัวอย่างข้อมูล (5 แถว)"):
-    st.dataframe(df.head(), use_container_width=True)
+    st.dataframe(df.head(10), use_container_width=True)
 
 # --- Officer section: เลือก/กรอก + ทำนาย ---
-st.subheader("👮‍♀️ เลือกเหตุการณ์หรือกรอกค่าเอง แล้วกดทำนาย")
+st.subheader("👮‍♀️ เจ้าหน้าที่ ศูนย์เตือนภัยพิบัติ")
+st.caption("เลือกเหตุการณ์หรือกรอกค่าเอง แล้วกดทำนาย")
 latest = df.tail(200).reset_index(drop=True)
 
 left, right = st.columns([1,1])
 with left:
-    st.markdown("**เลือกเหตุการณ์ (200 แถวล่าสุด)**")
+    st.markdown("**เลือกเหตุการณ์ ( 200 แถวล่าสุดข้อมูลจาก earthquakes.csv)**")
     idx = st.number_input("หมายเลขแถว:", min_value=0, max_value=len(latest)-1,
                           value=len(latest)-1, step=1)
     row = latest.iloc[int(idx)].to_dict()
@@ -57,7 +58,7 @@ with right:
         except Exception:
             return float(default)
 
-    mag = st.number_input("magnitude", value=defval("magnitude", 5.0))
+    mag = st.number_input("magnitude ", value=defval("magnitude", 5.0))
     dep = st.number_input("depth",     value=defval("depth", 10.0))
     cdi = st.number_input("cdi",       value=defval("cdi", 3.0))
     mmi = st.number_input("mmi",       value=defval("mmi", 3.0))
@@ -82,14 +83,14 @@ if st.button("🧠 ทำนายด้วย AI", use_container_width=True):
 # --- Publish announcement ---
 if "last_pred" in st.session_state:
     st.divider()
-    st.subheader("📢 เผยแพร่ประกาศ (ประชาชนจะเห็นด้านล่าง)")
+    st.subheader(" เผยแพร่ประกาศการแจ้งเตือนภัย")
     pred = st.session_state["last_pred"]
     region = st.text_input("พื้นที่/ภูมิภาค", value=pred["region"])
     msg_default = f"ตรวจพบเหตุสั่นสะเทือนระดับ {pred['risk'].upper()} — โปรดปฏิบัติตามคำแนะนำความปลอดภัย"
     message = st.text_area("ข้อความประกาศ", value=msg_default, height=80)
     tips = ["อยู่ใต้โต๊ะ/โครงสร้างแข็งแรง", "หลีกเลี่ยงลิฟต์/กระจก", "ปิดแก๊ส/ไฟฟ้า"]
 
-    if st.button("✅ เผยแพร่ประกาศ", type="primary", use_container_width=True):
+    if st.button("ประกาศแจ้งเตือน", type="primary", use_container_width=True):
         ANN_PATH.parent.mkdir(parents=True, exist_ok=True)
         doc = {
             "last_updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -104,7 +105,7 @@ if "last_pred" in st.session_state:
         }
         with open(ANN_PATH, "w", encoding="utf-8") as f:
             json.dump(doc, f, ensure_ascii=False, indent=2)
-        st.success("เผยแพร่แล้ว! เลื่อนลงไปดูพื้นที่ประกาศด้านล่างได้เลย 👇")
+        st.success("เผยแพร่แล้ว ตัวอย่างการประกาศอยู่ด้านล่าง ")
 
 # --- Public area ---
 st.divider()
@@ -116,15 +117,11 @@ if ANN_PATH.exists():
         level = str(a.get("risk_level","")).lower()
         color = {"green":"🟢","yellow":"🟡","orange":"🟠","red":"🔴"}.get(level, "🔶")
         st.markdown(f"### {color} ระดับแจ้งเตือน: **{str(a.get('risk_level','')).upper()}**")
-        st.write(f"พื้นที่: **{a.get('region','-')}**")
+        st.write(f"พื้นที่ : **{a.get('region','-')}**")
         if a.get("message"): st.write(a["message"])
         if a.get("tips"):
-            st.write("คำแนะนำ:")
+            st.write("คำแนะนความความปลอดภัย:")
             for t in a["tips"]:
                 st.write(f"- {t}")
 else:
     st.info("ยังไม่มีประกาศล่าสุด")
-
-# --- Credits (ยังคงไว้ตามข้อ 2) ---
-with st.expander("ℹ️ Dataset Source / ข้อมูลอ้างอิง"):
-    st.write("Dataset: Kaggle – Earthquake Alert Prediction (Ahmed Uzaki) หรือข้อมูลจริงจากหน่วยงานที่เกี่ยวข้อง")
