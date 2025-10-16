@@ -1,6 +1,7 @@
 # AI_project_master/app.py
-import os, json, time
+import os, json, time, base64
 from pathlib import Path
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
@@ -21,7 +22,7 @@ FIG_CM      = BASE / "metrics" / "figs" / "confusion_matrix.png"
 st.sidebar.title("🌎 Earthquake Alert")
 mode = st.sidebar.radio("เลือกโหมด", ["Public Alert", "Admin Dashboard"], index=0)
 
-# (ไม่ปลอดภัยระดับ production แต่เพียงพอสำหรับงานส่ง)
+# (PIN แบบง่ายสำหรับงานส่ง — เปลี่ยนได้ด้วย ENV)
 DEFAULT_PIN = os.environ.get("EA_ADMIN_PIN", "cis2025")
 admin_ok = False
 if mode == "Admin Dashboard":
@@ -33,7 +34,7 @@ st.title("🌎 ระบบแจ้งเตือนแผ่นดินไ�
 if mode == "Public Alert":
     st.caption("เลือกเหตุการณ์/กรอกค่า → ทำนายด้วย AI (Decision Tree) → เผยแพร่ประกาศ")
 else:
-    st.caption("แดชบอร์ดสำหรับเจ้าหน้าที่: ดูความแม่นยำ/พารามิเตอร์/ฟีเจอร์สำคัญ/เมทริกซ์ความสับสน")
+    st.caption("แดชบอร์ดสำหรับเจ้าหน้าที่: ดูความแม่นยำ/พารามิเตอร์/ฟีเจอร์สำคัญ/เมทริกซ์ความสับสน + Export รายงาน")
 
 # ---------------- Common: Check files ----------------
 missing = [p for p in [DATA_PATH, MODEL_PATH, ENC_PATH] if not p.exists()]
@@ -42,13 +43,127 @@ if mode == "Public Alert":
         st.error("ไม่พบไฟล์ต่อไปนี้:\n" + "\n".join(f"- {p}" for p in missing))
         st.stop()
 else:
-    # ในหน้า Admin ให้ยังแสดงแดชบอร์ดเท่าที่มี (ถ้าบางไฟล์ยังไม่พร้อม จะแจ้งเตือนเฉพาะส่วน)
-    pass
+    pass  # ในหน้า Admin แสดงเท่าที่มี
 
 # ---------------- Load (if exists) ----------------
 df = pd.read_csv(DATA_PATH) if DATA_PATH.exists() else None
 model = joblib.load(MODEL_PATH) if MODEL_PATH.exists() else None
 le    = joblib.load(ENC_PATH)   if ENC_PATH.exists()   else None
+
+# ---------- Helpers ----------
+def file_mtime(path: Path) -> str:
+    if not path.exists(): return "-"
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(path.stat().st_mtime))
+
+def read_file_bytes(path: Path) -> bytes:
+    return path.read_bytes() if path.exists() else b""
+
+def img_to_base64(path: Path) -> str:
+    if not path.exists(): return ""
+    return base64.b64encode(path.read_bytes()).decode("utf-8")
+
+def build_admin_report_html(metrics_df: pd.DataFrame | None,
+                            acc: float | None,
+                            best_info: dict,
+                            feature_names: list[str],
+                            feature_importances: list[float] | None,
+                            cm_base64: str) -> str:
+    # Styles
+    style = """
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      h1, h2 { margin-bottom: 8px; }
+      .pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#eef; margin-right:8px; }
+      table { border-collapse: collapse; width: 100%; margin: 8px 0 16px 0;}
+      th, td { border: 1px solid #ddd; padding: 8px; text-align:left;}
+      th { background:#f7f7f7; }
+      .small { color:#666; font-size: 12px; }
+      .section { margin: 18px 0; }
+      .muted { color:#555; }
+      .tag { background:#f3f3f3; padding:3px 8px; border-radius:6px; margin-right:6px; }
+    </style>
+    """
+    updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    acc_str = f"{acc*100:.2f}%" if acc is not None else "-"
+
+    # Feature importance table
+    fi_html = ""
+    if feature_importances and feature_names:
+        rows = "".join(
+            f"<tr><td>{n}</td><td>{round(v,4)}</td></tr>"
+            for n, v in sorted(zip(feature_names, feature_importances), key=lambda x: x[1], reverse=True)
+        )
+        fi_html = f"""
+        <div class="section">
+          <h2>Feature Importances</h2>
+          <table>
+            <thead><tr><th>Feature</th><th>Importance</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+        """
+
+    # Best params/feature-set
+    bp = best_info
+    params_html = ""
+    if bp.get("feature_set") or bp.get("features") or bp.get("params"):
+        params_html = f"""
+        <div class="section">
+          <h2>Best Configuration</h2>
+          <div><span class="tag">feature_set</span> {bp.get('feature_set','-')}</div>
+          <div><span class="tag">features</span> {bp.get('features','-')}</div>
+          <div><span class="tag">params</span> {bp.get('params','-')}</div>
+        </div>
+        """
+
+    # Confusion matrix image
+    cm_html = ""
+    if cm_base64:
+        cm_html = f"""
+        <div class="section">
+          <h2>Confusion Matrix</h2>
+          <img src="data:image/png;base64,{cm_base64}" style="max-width:100%;border:1px solid #ddd;border-radius:8px"/>
+        </div>
+        """
+
+    # metrics table (top 10)
+    metrics_table = ""
+    if metrics_df is not None and not metrics_df.empty:
+        top10 = metrics_df.sort_values("accuracy", ascending=False).head(10)
+        rows = "".join(
+            f"<tr><td>{r.feature_set}</td><td>{r.features}</td><td>{r.params}</td><td>{r.accuracy:.4f}</td></tr>"
+            for r in top10.itertuples(index=False)
+        )
+        metrics_table = f"""
+        <div class="section">
+          <h2>Top Experiments (by Accuracy)</h2>
+          <table>
+            <thead><tr><th>feature_set</th><th>features</th><th>params</th><th>accuracy</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>
+        """
+
+    html = f"""
+    <!doctype html>
+    <html><head><meta charset="utf-8"/>{style}<title>Admin Report - Earthquake AI</title></head>
+    <body>
+      <h1>Earthquake AI — Admin Report</h1>
+      <div class="small">Generated at: {updated}</div>
+      <div class="section">
+        <span class="pill">Model: Decision Tree</span>
+        <span class="pill">Test Accuracy: {acc_str}</span>
+      </div>
+      {params_html}
+      {fi_html}
+      {cm_html}
+      {metrics_table}
+      <div class="section muted small">
+        Notes: Accuracy/FI อ้างอิงจากไฟล์ metrics.csv และโมเดลล่าสุดที่บันทึกไว้ในโฟลเดอร์ models/
+      </div>
+    </body></html>
+    """
+    return html
 
 # ========== MODE: ADMIN DASHBOARD ==========
 if mode == "Admin Dashboard":
@@ -61,11 +176,14 @@ if mode == "Admin Dashboard":
     # 1) Accuracy & Best Params from metrics.csv
     with colA:
         st.subheader("📊 Model Accuracy")
+        acc = None
+        top_row = {}
+        mdf = None
         if METRICS_CSV.exists():
             mdf = pd.read_csv(METRICS_CSV)
             if not mdf.empty and "accuracy" in mdf.columns:
-                top = mdf.sort_values("accuracy", ascending=False).iloc[0]
-                acc = float(top["accuracy"])
+                top_row = mdf.sort_values("accuracy", ascending=False).iloc[0].to_dict()
+                acc = float(top_row["accuracy"])
                 st.metric("Accuracy (Test)", f"{acc*100:.2f}%")
             else:
                 st.info("metrics.csv ว่างหรือไม่มีคอลัมน์ accuracy")
@@ -74,46 +192,43 @@ if mode == "Admin Dashboard":
 
     with colB:
         st.subheader("⚙️ Best Parameters")
-        if METRICS_CSV.exists():
-            mdf = pd.read_csv(METRICS_CSV)
-            if not mdf.empty:
-                top = mdf.sort_values("accuracy", ascending=False).iloc[0]
-                st.code(f"feature_set: {top.get('feature_set','-')}\n"
-                        f"features   : {top.get('features','-')}\n"
-                        f"params     : {top.get('params','-')}", language="text")
-            else:
-                st.info("ยังไม่มีข้อมูล params ใน metrics.csv")
+        if top_row:
+            st.code(
+                f"feature_set: {top_row.get('feature_set','-')}\n"
+                f"features   : {top_row.get('features','-')}\n"
+                f"params     : {top_row.get('params','-')}",
+                language="text"
+            )
         else:
-            st.info("ยังไม่พบ metrics.csv")
+            st.info("ยังไม่มีข้อมูล best config")
 
     with colC:
         st.subheader("🕒 Model Files")
         rows = []
         for p in [MODEL_PATH, ENC_PATH, METRICS_CSV]:
-            if p.exists():
-                ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(p.stat().st_mtime))
-                rows.append({"file": str(p.name), "status": "OK", "updated": ts})
-            else:
-                rows.append({"file": str(p.name), "status": "missing", "updated": "-"})
+            rows.append({
+                "file": str(p.name),
+                "status": "OK" if p.exists() else "missing",
+                "updated": file_mtime(p)
+            })
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
 
     st.divider()
 
-    # 2) Feature Importances (from DecisionTree)
+    # 2) Feature Importances (Decision Tree)
     st.subheader("🌳 Feature Importances (Decision Tree)")
-    if model is not None and hasattr(model, "feature_importances_") and df is not None:
-        # ใช้ฟีเจอร์ที่เว็บรองรับ
-        feat_cols = [c for c in ["magnitude","depth","cdi","mmi","sig"] if c in df.columns]
+    feat_cols = [c for c in ["magnitude","depth","cdi","mmi","sig"] if df is not None and c in df.columns]
+    if model is not None and hasattr(model, "feature_importances_") and feat_cols:
         try:
             imps = pd.Series(model.feature_importances_, index=feat_cols).sort_values(ascending=False)
-            st.bar_chart(imps)  # chart สำหรับ admin เท่านั้น
+            st.bar_chart(imps)  # แสดงเฉพาะหน้า admin
             st.caption("หมายเหตุ: ค่า importance สูง = โมเดลให้ความสำคัญกับฟีเจอร์นั้นมากในการตัดสินใจ")
         except Exception as e:
             st.error(f"ไม่สามารถอ่าน feature_importances_: {e}")
     else:
         st.info("ยังไม่พบโมเดลหรือตัวชี้วัดความสำคัญของฟีเจอร์ (ต้องใช้ Decision Tree)")
 
-    # 3) Confusion Matrix (ถ้ามีรูปจาก Jupyter)
+    # 3) Confusion Matrix (from notebook if exists)
     st.subheader("🧩 Confusion Matrix (จากการประเมินในโน้ตบุ๊ก)")
     if FIG_CM.exists():
         st.image(str(FIG_CM), caption="Confusion Matrix (ไฟล์จาก notebooks)")
@@ -121,18 +236,60 @@ if mode == "Admin Dashboard":
         st.info("ยังไม่พบไฟล์รูป Confusion Matrix (metrics/figs/confusion_matrix.png)")
 
     st.divider()
+
+    # 4) Export Report & Data
+    st.subheader("📤 Export รายงานสำหรับเจ้าหน้าที่")
+    # 4.1 ดาวน์โหลด metrics.csv ต้นฉบับ
+    if METRICS_CSV.exists():
+        st.download_button(
+            label="⬇️ ดาวน์โหลด metrics.csv",
+            data=read_file_bytes(METRICS_CSV),
+            file_name="metrics.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    else:
+        st.info("ยังไม่มี metrics.csv สำหรับดาวน์โหลด")
+
+    # 4.2 ดาวน์โหลด HTML Report (รวม Accuracy/Params/FI/CM/Top10)
+    best_info = {
+        "feature_set": top_row.get("feature_set") if top_row else None,
+        "features": top_row.get("features") if top_row else None,
+        "params": top_row.get("params") if top_row else None,
+    }
+    cm64 = img_to_base64(FIG_CM)
+    fi_list = model.feature_importances_.tolist() if (model is not None and hasattr(model, "feature_importances_") and feat_cols) else None
+    html_report = build_admin_report_html(
+        metrics_df=mdf if (METRICS_CSV.exists() and mdf is not None) else None,
+        acc=acc,
+        best_info=best_info,
+        feature_names=feat_cols,
+        feature_importances=fi_list,
+        cm_base64=cm64
+    )
+    st.download_button(
+        label="📄 ดาวน์โหลด Admin Report (HTML)",
+        data=html_report.encode("utf-8"),
+        file_name=f"admin_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+        mime="text/html",
+        use_container_width=True
+    )
+
+    st.caption("Tip: เปิดไฟล์ HTML นี้บนเบราว์เซอร์หรือแนบส่งให้คณะ/อาจารย์ได้ทันที")
+
+    st.divider()
     st.subheader("📝 หมายเหตุสำหรับเจ้าหน้าที่")
     st.write(
         "- Accuracy เป็นผลจากชุดทดสอบ/การทดลอง (อ้างอิง metrics.csv)\n"
         "- แนะนำติดตาม Precision/Recall รายคลาสในโน้ตบุ๊กเพื่อดูจุดสับสน\n"
-        "- ปรับปรุงโมเดล: อัปเดตรายการฟีเจอร์/พารามิเตอร์ใน train.py หรือ notebooks แล้วสร้างไฟล์ใหม่\n"
+        "- ปรับปรุงโมเดล: อัปเดตรายการฟีเจอร์/พารามิเตอร์ใน notebooks/train.py แล้วสร้างไฟล์ใหม่\n"
     )
 
 # ========== MODE: PUBLIC ALERT ==========
 if mode == "Public Alert":
     # ทำความสะอาดตัวเลขสำหรับ UI
     for col in ["magnitude","depth","cdi","mmi","sig"]:
-        if col in df.columns:
+        if df is not None and col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
             df[col] = df[col].fillna(df[col].median())
 
