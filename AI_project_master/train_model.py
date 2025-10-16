@@ -1,13 +1,14 @@
-# train.py
-import os, json
-import pandas as pd
+# AI_project_master/train.py
+import json
 from pathlib import Path
+import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import accuracy_score
 import joblib
 
+# ---- Paths ----
 BASE = Path("AI_project_master")
 DATA_PATH  = BASE / "data" / "earthquakes.csv"
 MODELS_DIR = BASE / "models"
@@ -15,30 +16,32 @@ METRICS_DIR= BASE / "metrics"
 MODELS_DIR.mkdir(parents=True, exist_ok=True)
 METRICS_DIR.mkdir(parents=True, exist_ok=True)
 
-# 1) โหลดข้อมูล
+# ---- Load data ----
 df = pd.read_csv(DATA_PATH)
 
-# จัดการค่าว่างเบื้องต้น
-for col in ["magnitude","depth","cdi","mmi","sig"]:
-    if col in df.columns:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
-df.fillna({c: df[c].median() for c in ["magnitude","depth","cdi","mmi","sig"] if c in df.columns}, inplace=True)
+# numeric columns we may use
+num_cols_all = ["magnitude", "depth", "cdi", "mmi", "sig"]
+num_cols = [c for c in num_cols_all if c in df.columns]
 
-# 2) target: 'alert' -> encode
+# coerce to numeric & fillna
+for c in num_cols:
+    df[c] = pd.to_numeric(df[c], errors="coerce")
+    df[c].fillna(df[c].median(), inplace=True)
+
+# target
 if "alert" not in df.columns:
-    raise ValueError("Dataset ต้องมีคอลัมน์ 'alert' เป็นเป้าหมาย")
+    raise ValueError("Dataset ต้องมีคอลัมน์ 'alert' เป็นเป้าหมาย (ระดับแจ้งเตือน)")
+
 le = LabelEncoder()
 y = le.fit_transform(df["alert"].astype(str))
 
-# 3) กำหนด candidate features หลายชุด
+# Feature sets (เลือกเฉพาะที่มีจริง)
 feature_sets = {
-    "F1_basic": ["magnitude","depth","sig"],
-    "F2_all"  : ["magnitude","depth","cdi","mmi","sig"],
+    "F1_basic": [c for c in ["magnitude", "depth", "sig"] if c in num_cols],
+    "F2_all"  : [c for c in ["magnitude", "depth", "cdi", "mmi", "sig"] if c in num_cols],
 }
-# กรองเฉพาะฟีเจอร์ที่มีจริง
-feature_sets = {k:[c for c in v if c in df.columns] for k,v in feature_sets.items()}
 
-# 4) กำหนดชุดพารามิเตอร์ที่จะทดลอง
+# Param grid (ทดลองหลายพารามิเตอร์)
 param_grid = [
     {"max_depth": d, "min_samples_split": mss}
     for d in [None, 5, 10, 20]
@@ -49,7 +52,7 @@ rows = []
 best = {"acc": -1, "model": None, "features": None, "params": None}
 
 for fname, feats in feature_sets.items():
-    if len(feats) == 0: 
+    if not feats:
         continue
     X = df[feats]
 
@@ -60,28 +63,30 @@ for fname, feats in feature_sets.items():
     for params in param_grid:
         clf = DecisionTreeClassifier(random_state=42, **params)
         clf.fit(X_train, y_train)
-        acc = accuracy_score(y_test, clf.predict(X_test))
+        y_pred = clf.predict(X_test)
+        acc = accuracy_score(y_test, y_pred)
 
         rows.append({
             "feature_set": fname,
             "features": ",".join(feats),
             "params": json.dumps(params),
-            "accuracy": round(acc, 4)
+            "accuracy": round(acc, 4),
         })
 
         if acc > best["acc"]:
             best = {"acc": acc, "model": clf, "features": feats, "params": params}
 
-# 5) บันทึกผลการทดลองทั้งหมด
-metrics_df = pd.DataFrame(rows).sort_values(["accuracy"], ascending=False)
+# Save metrics table
+metrics_df = pd.DataFrame(rows).sort_values("accuracy", ascending=False)
 metrics_df.to_csv(METRICS_DIR / "metrics.csv", index=False)
 
-# 6) เซฟโมเดลที่ดีที่สุด + encoder
+# Save best model + encoder
 joblib.dump(best["model"], MODELS_DIR / "earthquake_model.pkl")
 joblib.dump(le, MODELS_DIR / "label_encoder.pkl")
 
 print("✅ Best accuracy:", round(best["acc"], 4))
 print("🏷  Features:", best["features"])
 print("⚙️  Params:", best["params"])
-print("💾 Saved:", MODELS_DIR / "earthquake_model.pkl", ",", MODELS_DIR / "label_encoder.pkl")
+print("💾 Saved model:", MODELS_DIR / "earthquake_model.pkl")
+print("💾 Saved encoder:", MODELS_DIR / "label_encoder.pkl")
 print("📊 Metrics:", METRICS_DIR / "metrics.csv")
