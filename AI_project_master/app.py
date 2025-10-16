@@ -73,7 +73,7 @@ if st.button(" ทำนายด้วย AI", use_container_width=True):
     X = inputs[feat_cols]
     y_id = model.predict(X)[0]
     y_label = le.inverse_transform([y_id])[0]
-    st.success(f"ผลทำนายระดับแจ้งเตือน: **{str(y_label).upper()}**")
+    st.success(f"ผลทำนายระดับแจ้งเตือน : **{str(y_label).upper()}**")
     st.session_state["last_pred"] = {
         "risk": str(y_label),
         "inputs": inputs.iloc[0].to_dict(),
