@@ -26,7 +26,7 @@ df = pd.read_csv(DATA_PATH)
 model = joblib.load(MODEL_PATH)
 le    = joblib.load(ENC_PATH)
 
-# --- เตรียมคอลัมน์ตัวเลข (ไม่มี cdi) ---
+# --- เตรียมคอลัมน์ตัวเลข ( cdi ออก) ---
 for col in ["magnitude","depth","mmi","sig"]:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -66,12 +66,12 @@ with right:
     sig = st.number_input("sig",       value=defval("sig", 300.0))
 
     inputs = pd.DataFrame([{
-        "magnitude": mag, "depth": dep, "mmi": mmi, "sig": sig  # << ไม่มี cdi
+        "magnitude": mag, "depth": dep, "mmi": mmi, "sig": sig  # << ลบ cdi ออก
     }])
 
 # --- ปุ่ม “ทำนายด้วย AI” ---
 if st.button(" ทำนายด้วย AI", use_container_width=True):
-    feat_cols = [c for c in ["magnitude","depth","mmi","sig"] if c in df.columns]  # << ไม่มี cdi
+    feat_cols = [c for c in ["magnitude","depth","mmi","sig"] if c in df.columns]  # ลบ cdi ออก
     X = inputs[feat_cols]
     y_id = model.predict(X)[0]
     y_label = le.inverse_transform([y_id])[0]
