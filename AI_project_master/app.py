@@ -27,7 +27,7 @@ model = joblib.load(MODEL_PATH)
 le    = joblib.load(ENC_PATH)
 
 # Clean numeric for UI (ตรียมคอลัมน์ตัวเลข)
-for col in ["magnitude","depth","cdi","mmi","sig"]:
+for col in ["magnitude","depth","mmi","sig"]:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
         df[col] = df[col].fillna(df[col].median())
@@ -64,11 +64,11 @@ with right:
     sig = st.number_input("sig",       value=defval("sig", 300.0))
 
     inputs = pd.DataFrame([{
-        "magnitude": mag, "depth": dep, "cdi": cdi, "mmi": mmi, "sig": sig
+        "magnitude": mag, "depth": dep, "mmi": mmi, "sig": sig
     }])
 # ---ปุ่ม “ทำนายด้วย AI”----
 if st.button(" ทำนายด้วย AI", use_container_width=True):
-    feat_cols = [c for c in ["magnitude","depth","cdi","mmi","sig"] if c in df.columns]
+    feat_cols = [c for c in ["magnitude","depth","mmi","sig"] if c in df.columns]
     X = inputs[feat_cols]
     y_id = model.predict(X)[0]
     y_label = le.inverse_transform([y_id])[0]
@@ -118,7 +118,7 @@ if ANN_PATH.exists():
         st.write(f"พื้นที่ : **{a.get('region','-')}**")
         if a.get("message"): st.write(a["message"])
         if a.get("tips"):
-            st.write("คำแนะนความความปลอดภัย ดังนี้")
+            st.write("คำแนะนำความความปลอดภัย ดังนี้")
             for t in a["tips"]:
                 st.write(f"- {t}")
 else:
