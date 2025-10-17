@@ -26,7 +26,7 @@ df = pd.read_csv(DATA_PATH)
 model = joblib.load(MODEL_PATH)
 le    = joblib.load(ENC_PATH)
 
-# Clean numeric for UI (ตรียมคอลัมน์ตัวเลข)
+# --- เตรียมคอลัมน์ตัวเลข (ไม่มี cdi) ---
 for col in ["magnitude","depth","mmi","sig"]:
     if col in df.columns:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -34,18 +34,21 @@ for col in ["magnitude","depth","mmi","sig"]:
 
 st.write(f"ข้อมูลทั้งหมด : {len(df):,} แถว")
 with st.expander("ดูตัวอย่างข้อมูล (10 แถว)"):
-    st.dataframe(df.head(10), use_container_width=True)
+    cols_show = [c for c in ["magnitude","depth","mmi","sig","alert","place"] if c in df.columns]
+    st.dataframe(df[cols_show].head(10), use_container_width=True)
 
-# --- Officer section: เลือก/กรอก + ทำนาย ---
+# --- โซนเจ้าหน้าที่: เลือก/กรอก + ทำนาย ---
 st.subheader("👮‍♀️ เจ้าหน้าที่ ศูนย์เตือนภัยพิบัติ")
 st.caption("เลือกเหตุการณ์หรือกรอกค่าเอง แล้วกดทำนาย")
 latest = df.tail(200).reset_index(drop=True)
 
 left, right = st.columns([1,1])
 with left:
-    st.markdown("**เลือกเหตุการณ์ ( 200 แถวล่าสุดข้อมูล )**")
-    idx = st.number_input("หมายเลขแถว:", min_value=0, max_value=len(latest)-1,
-                          value=len(latest)-1, step=1)
+    st.markdown("**เลือกเหตุการณ์ (200 แถวล่าสุด)**")
+    idx = st.number_input(
+        "หมายเลขแถว:", min_value=0, max_value=len(latest)-1,
+        value=len(latest)-1, step=1
+    )
     row = latest.iloc[int(idx)].to_dict()
 
 with right:
@@ -57,17 +60,18 @@ with right:
         except Exception:
             return float(default)
 
-    mag = st.number_input("magnitude ", value=defval("magnitude", 5.0))
+    mag = st.number_input("magnitude", value=defval("magnitude", 5.0))
     dep = st.number_input("depth",     value=defval("depth", 10.0))
     mmi = st.number_input("mmi",       value=defval("mmi", 3.0))
     sig = st.number_input("sig",       value=defval("sig", 300.0))
 
     inputs = pd.DataFrame([{
-        "magnitude": mag, "depth": dep, "mmi": mmi, "sig": sig
+        "magnitude": mag, "depth": dep, "mmi": mmi, "sig": sig  # << ไม่มี cdi
     }])
-# ---ปุ่ม “ทำนายด้วย AI”----
+
+# --- ปุ่ม “ทำนายด้วย AI” ---
 if st.button(" ทำนายด้วย AI", use_container_width=True):
-    feat_cols = [c for c in ["magnitude","depth","mmi","sig"] if c in df.columns]
+    feat_cols = [c for c in ["magnitude","depth","mmi","sig"] if c in df.columns]  # << ไม่มี cdi
     X = inputs[feat_cols]
     y_id = model.predict(X)[0]
     y_label = le.inverse_transform([y_id])[0]
@@ -117,7 +121,7 @@ if ANN_PATH.exists():
         st.write(f"พื้นที่ : **{a.get('region','-')}**")
         if a.get("message"): st.write(a["message"])
         if a.get("tips"):
-            st.write("คำแนะนำความความปลอดภัย ดังนี้")
+            st.write("คำแนะนำความปลอดภัย ดังนี้")
             for t in a["tips"]:
                 st.write(f"- {t}")
 else:
