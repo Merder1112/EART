@@ -59,7 +59,6 @@ with right:
 
     mag = st.number_input("magnitude ", value=defval("magnitude", 5.0))
     dep = st.number_input("depth",     value=defval("depth", 10.0))
-    cdi = st.number_input("cdi",       value=defval("cdi", 3.0))
     mmi = st.number_input("mmi",       value=defval("mmi", 3.0))
     sig = st.number_input("sig",       value=defval("sig", 300.0))
 
